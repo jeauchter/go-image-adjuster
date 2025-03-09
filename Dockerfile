@@ -1,8 +1,4 @@
-# Use NVIDIA's CUDA base image with Go
-FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS builder
-
-# Install dependencies
-RUN apt-get update && apt-get install -y \# Base image with CUDA support
+# Base image with CUDA support
 FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS builder
 
 # Install dependencies
@@ -10,19 +6,44 @@ RUN apt-get update && apt-get install -y \
     gcc g++ make \
     golang \
     protobuf-compiler \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+# Install Go 1.24.1
+RUN wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz && \
+    rm -rf /usr/local/go && \
+    tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz && \
+    rm go1.24.1.linux-amd64.tar.gz
+
+# Set up Go environment
+ENV PATH="/usr/local/go/bin:$PATH"
+ENV GOPATH="/root/go"
+ENV PATH="$GOPATH/bin:$PATH"
+
+# Verify Go version (ensures correct installation)
+RUN go version
+
+# Install protoc Go plugins
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Set PATH to include Go binaries
+ENV PATH="/root/go/bin:$PATH"
 
 # Set working directory
 WORKDIR /app
 
-# Copy CUDA kernel source
-COPY cuda/resize_kernel.cu /app/cuda/
+# Copy Go modules
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the whole project
+COPY . .
+
+# Compile protobuf files
+RUN protoc --go_out=. --go-grpc_out=. proto/*.proto
 
 # Compile CUDA kernel to PTX
-RUN nvcc -ptx /app/cuda/resize_kernel.cu -o /app/cuda/resize_kernel.ptx
-
-# Copy Go source code
-COPY . .
+RUN nvcc -ptx cuda/resize_kernel.cu -o cuda/resize_kernel.ptx
 
 # Build Go application
 RUN go build -o gpu-image-resizer main.go
@@ -39,49 +60,6 @@ COPY --from=builder /app/cuda/resize_kernel.ptx ./cuda/
 
 # Expose gRPC server port
 EXPOSE 50051
-
-# Run the application
-CMD ["./gpu-image-resizer"]
-
-    protobuf-compiler \
-    git curl build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Go
-RUN curl -OL https://golang.org/dl/go1.21.0.linux-amd64.tar.gz && \
-    tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz && \
-    rm go1.21.0.linux-amd64.tar.gz
-
-ENV PATH="/usr/local/go/bin:${PATH}"
-WORKDIR /app
-
-# Install Go gRPC and protobuf plugins
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
-    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-# Copy project files
-COPY . .
-
-# Generate gRPC code from .proto files
-RUN protoc --go_out=. --go-grpc_out=. proto/image_resizer.proto
-
-# Build the Go application
-RUN /usr/local/go/bin/go build -o gpu-image-resizer main.go
-
-# Use NVIDIA runtime base image for execution
-FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
-
-WORKDIR /app
-
-# Copy the compiled binary from the builder stage
-COPY --from=builder /app/gpu-image-resizer .
-
-# Expose gRPC port
-EXPOSE 50051
-
-# Set NVIDIA runtime for Docker
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Run the application
 CMD ["./gpu-image-resizer"]

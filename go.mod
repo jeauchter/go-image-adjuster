@@ -1,6 +1,6 @@
 module github.com/jeauchter/go-image-adjuster
 
-go 1.22.0
+go 1.23
 
 require (
 	github.com/mumax/3 v3.9.3+incompatible
@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect

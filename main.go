@@ -14,7 +14,7 @@ import (
 	"github.com/nfnt/resize"
 	"google.golang.org/grpc"
 
-	pb "./proto"
+	pb "github.com/jeauchter/go-image-adjuster/proto"
 )
 
 // checkGPUAvailability checks if an NVIDIA GPU is available

@@ -1,6 +1,7 @@
 syntax = "proto3";
 
-package resizer;
+package proto;
+option go_package = "github.com/jeauchter/go-image-adjuster/proto";
 
 service ImageResizer {
   rpc ResizeImage (ResizeImageRequest) returns (ResizeImageResponse);
