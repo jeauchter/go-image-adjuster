@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package resizer;
+
+service ImageResizer {
+  rpc ResizeImage (ResizeImageRequest) returns (ResizeImageResponse);
+}
+
+message ResizeImageRequest {
+  bytes image_data = 1; // Raw image bytes
+  uint32 width = 2;     // Desired width
+  uint32 height = 3;    // Desired height
+  uint32 quality = 4;   // JPEG quality (1-100)
+  uint32 gpu_id = 5;    // Optional GPU ID for multi-GPU setups
+}
+
+message ResizeImageResponse {
+  bytes resized_image = 1; // Resized image bytes
+  bool used_gpu = 2;       // Indicates if GPU was used
+  string error_message = 3; // Error message if applicable
+}
