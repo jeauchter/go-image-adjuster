@@ -16,6 +16,20 @@ func main() {
 	if serverAddress == "" {
 		serverAddress = "localhost:50051"
 	}
+	// Read image from a file inside the container
+	imagePath := "/client/test_image/Test-image.jpeg"
+	// check that image exists
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		log.Fatalf("image file does not exist: %v", err)
+	}
+	// Read image data
+	imageData, err := os.ReadFile(imagePath)
+	if err != nil {
+		log.Fatalf("failed to read input image: %v", err)
+	}
+
+	// check size of image
+	log.Printf("Image size: %d bytes", len(imageData))
 
 	// Create a context with a timeout for the connection
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -31,7 +45,7 @@ func main() {
 
 	// Prepare the request
 	req := &pb.ResizeImageRequest{
-		ImageData: []byte{}, // Add your image data here
+		ImageData: imageData, // Add your image data here
 		Width:     800,
 		Height:    600,
 		Quality:   90,

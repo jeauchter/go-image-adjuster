@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/jpeg"
+	_ "image/jpeg"
 	"log"
 	"net"
 	"os"
@@ -64,34 +66,66 @@ func resizeImageCPU(imageData []byte, width, height uint, quality int) ([]byte, 
 	return output.Bytes(), nil
 }
 
-// getImageDimensions decodes the image configuration to obtain width and height.
-func getImageDimensions(imageData []byte) (int, int) {
-	config, _, err := image.DecodeConfig(bytes.NewReader(imageData))
-	if err != nil {
-		log.Printf("failed to decode image configuration: %v", err)
-		return 0, 0
+// Decode the image on the CPU, converting it to NRGBA
+func decodeToNRGBA(imageData []byte) (*image.NRGBA, error) {
+	// check the size of imageData
+	if len(imageData) == 0 {
+		return nil, fmt.Errorf("image data is empty")
 	}
-	return config.Width, config.Height
+
+	// First, check the format with DecodeConfig (optional but helpful)
+	_, format, err := image.DecodeConfig(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image config: %w", err)
+	}
+	if format != "jpeg" {
+		return nil, fmt.Errorf("unsupported image format: %s", format)
+	}
+
+	// Then actually decode the full image bytes
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image on CPU: %w", err)
+	}
+
+	// Convert to NRGBA
+	bounds := img.Bounds()
+	nrgbaImg := image.NewNRGBA(bounds)
+	draw.Draw(nrgbaImg, bounds, img, bounds.Min, draw.Src)
+	return nrgbaImg, nil
 }
 
 // resizeImageGPU resizes the image using the GPU
 func resizeImageGPU(imageData []byte, newWidth, newHeight, quality int) ([]byte, error) {
+	// 1. Decode the image on the CPU
+	cpuImg, err := decodeToNRGBA(imageData)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Get pixel data in RGBA format
+	oldWidth := cpuImg.Bounds().Dx()
+	oldHeight := cpuImg.Bounds().Dy()
+	rgbaBytes := cpuImg.Pix
 	// Initialize CUDA
 	cu.Init(0)
 
+	// Create a device and context
+	dev := cu.Device(0)
+	ctx := cu.CtxCreate(0, dev)
+	defer ctx.Destroy()
+
 	// Allocate GPU memory for input and output images
-	deviceInputImage := cu.MemAlloc(int64(len(imageData)))
+	deviceInputImage := cu.MemAlloc(int64(len(rgbaBytes)))
 	defer cu.MemFree(deviceInputImage)
 
 	deviceOutputImage := cu.MemAlloc(int64(newWidth * newHeight * 4)) // Assuming 4 bytes per pixel (RGBA)
 	defer cu.MemFree(deviceOutputImage)
 
 	// Copy input image data to GPU
-	cu.MemcpyHtoD(deviceInputImage, unsafe.Pointer(&imageData[0]), int64(len(imageData)))
+	cu.MemcpyHtoD(deviceInputImage, unsafe.Pointer(&rgbaBytes[0]), int64(len(rgbaBytes)))
 
-	// Launch the CUDA kernel to resize the image
-	oldWidth, oldHeight := getImageDimensions(imageData) // Assuming a function to get image dimensions
-	err := launchResizeKernel(deviceInputImage, oldWidth, oldHeight, newWidth, newHeight)
+	err = launchResizeKernel(deviceInputImage, oldWidth, oldHeight, newWidth, newHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to launch resize kernel: %w", err)
 	}
@@ -123,6 +157,13 @@ type server struct {
 }
 
 func (s *server) ResizeImage(ctx context.Context, req *pb.ResizeImageRequest) (*pb.ResizeImageResponse, error) {
+	// Check if the context is canceled before doing expensive work
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// proceed
+	}
 	log.Println("Received resize request")
 
 	// Check for GPU availability

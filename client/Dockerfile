@@ -1,17 +1,18 @@
 FROM golang:1.24
 
-# Set working directory
 WORKDIR /app
 
-# Copy Go modules
+# Copy module files from root of project
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the whole project
-COPY . .
+# Copy the proto folder from root of project so the client can import it
+COPY proto ./proto
 
-# Build the client application
-RUN go build -o image-resizer-client main.go
+# Copy the client code
+COPY client ./client
 
-# Run the client application
+# Build the client app
+RUN go build -o image-resizer-client ./client/main.go
+
 CMD ["./image-resizer-client"]

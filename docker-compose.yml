@@ -12,6 +12,8 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
+    volumes:
+      - ./client:/client
     depends_on:
       - gpu-image-resizer
     environment:
