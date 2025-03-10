@@ -1,12 +1,33 @@
 # Base image with CUDA support
 FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS builder
 
+# Set environment variable to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     gcc g++ make \
     golang \
     protobuf-compiler \
     wget \
+    cmake \
+    libgtk2.0-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libswscale-dev \
+    libtbb2 \
+    libtbb-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    tzdata \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# Install CUDA libraries and headers
+RUN apt-get update && apt-get install -y \
+    cuda-toolkit-12-2 \
     && rm -rf /var/lib/apt/lists/*
 # Install Go 1.24.1
 RUN wget https://go.dev/dl/go1.24.1.linux-amd64.tar.gz && \

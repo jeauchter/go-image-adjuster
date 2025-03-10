@@ -1,0 +1,18 @@
+services:
+  gpu-image-resizer:
+    image: image-adjuster
+    ports:
+      - "50051:50051"
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    depends_on:
+      - gpu-image-resizer
+    environment:
+      - GRPC_SERVER_ADDRESS=gpu-image-resizer:50051
